@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { memo } from "react";
+import React, { memo } from "react";
 import { useWindowSize } from "usehooks-ts";
 import { SidebarToggle } from "@/components/sidebar-toggle";
-import { Button } from "@/components/ui/button";
+import { Button } from "./ui/button";
 import { PlusIcon, VercelIcon } from "./icons";
 import { useSidebar } from "./ui/sidebar";
 import { VisibilitySelector, type VisibilityType } from "./visibility-selector";
+import { signOut, useSession } from "next-auth/react";
 
 function PureChatHeader({
   chatId,
@@ -21,7 +22,8 @@ function PureChatHeader({
 }) {
   const router = useRouter();
   const { open } = useSidebar();
-
+  const { data: session, status, update } = useSession();
+  const [isLoggingOut, setIsLoggingOut] = React.useState(false);
   const { width: windowWidth } = useWindowSize();
 
   return (
@@ -50,19 +52,46 @@ function PureChatHeader({
         />
       )}
 
-      <Button
-        asChild
-        className="order-3 hidden bg-zinc-900 px-2 text-zinc-50 hover:bg-zinc-800 md:ml-auto md:flex md:h-fit dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
-      >
-        <Link
-          href={"https://vercel.com/templates/next.js/nextjs-ai-chatbot"}
-          rel="noreferrer"
-          target="_noblank"
+      {status === "authenticated" ? (
+        <Button
+          className="order-3 hidden bg-zinc-900 px-2 text-zinc-50 hover:bg-zinc-800 md:ml-auto md:flex md:h-fit dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+          onClick={async () => {
+            if (isLoggingOut) return;
+
+            setIsLoggingOut(true);
+            try {
+              // Sign out from NextAuth - this will clear server-side session
+              await signOut({
+                callbackUrl: "/",
+                redirect: false,
+              });
+
+              // Update client-side session state immediately
+              await update();
+
+              // Clear any client-side state and navigate
+              router.push("/");
+              router.refresh();
+            } catch (error) {
+              console.error("Logout error:", error);
+              // Fallback: force redirect to home page
+              window.location.href = "/";
+            } finally {
+              setIsLoggingOut(false);
+            }
+          }}
+          disabled={isLoggingOut}
         >
-          <VercelIcon size={16} />
-          Deploy with Vercel
-        </Link>
-      </Button>
+          {isLoggingOut ? "Logging out..." : "Logout"}
+        </Button>
+      ) : (
+        <Button
+          asChild
+          className="order-3 hidden bg-zinc-900 px-2 text-zinc-50 hover:bg-zinc-800 md:ml-auto md:flex md:h-fit dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+        >
+          <Link href="/api/auth/signin">Sign In</Link>
+        </Button>
+      )}
     </header>
   );
 }
